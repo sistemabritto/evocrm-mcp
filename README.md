@@ -4,6 +4,32 @@ Servidor [MCP](https://modelcontextprotocol.io/) em TypeScript para conectar ass
 
 O alvo é a API da branch `main` do upstream [evolution-foundation/evo-ai-crm-community](https://github.com/evolution-foundation/evo-ai-crm-community), inspecionada em 23/10/2026 no commit **`30fcb61dd824aa5b74e01467001f58cc90c2281f`**. Os contratos foram conferidos em [config/routes.rb](https://github.com/evolution-foundation/evo-ai-crm-community/blob/30fcb61dd824aa5b74e01467001f58cc90c2281f/config/routes.rb) e [app/controllers/api/v1](https://github.com/evolution-foundation/evo-ai-crm-community/tree/30fcb61dd824aa5b74e01467001f58cc90c2281f/app/controllers/api/v1), com apoio dos helpers, serializers e finders desse mesmo commit. Não depende de endpoints exclusivos de forks. O client Python `int-evo-crm` serviu apenas de referência auxiliar de payloads.
 
+## Novidades da 0.3.0
+
+- **Administração do CRM**: criar e editar funis (etapas e campos dos cards), etapas, campos dos cards, tarefas (editar, cancelar, reabrir), etiquetas e campos personalizados de contato/conversa.
+- **Servidor OAuth 2.1** (`oauth-server.mjs`, `npm run start:oauth`): conector para Claude, ChatGPT/Codex e Grok, com tela de senha (`CONNECTOR_PASSWORD_SCRYPT_FILE`), `PUBLIC_URL` e `MCP_ORG_NAME`. `MCP_DISABLED_TOOLS` desliga ferramentas (ex.: `message_send`).
+- **Endpoints internos para agentes nativos do CRM** (só rede interna; pelo proxy reverso, com `X-Forwarded-For`, a chamada é recusada):
+  - `/agente/mcp` (`AGENT_TOKEN_FILE`): agente de e-mails → `emails_processar`, `publicacoes_listar`;
+  - `/atendimento/mcp` (`ATTENDANCE_TOKEN_FILE`): agente de atendimento → `enviar_alerta_equipe`, `pedir_aprovacao`, `nota_contato_criar`.
+  No agente, use "MCP personalizado" com a URL interna e o cabeçalho `Authorization: Bearer <token>`.
+
+### Módulo opcional: equipe (alertas, escalonamento e aprovações)
+Liga com `TEAM_INBOX_ID` (caixa de WhatsApp) e `TEAM_MEMBERS=chave:5511...:Nome,...`. Destinos são uma **lista fixa**; `TEAM_BLOCKED_NUMBERS` nunca recebe nada.
+- `alerta_whatsapp_enviar` (conector) e `enviar_alerta_equipe` (agente). Alerta para `TEAM_ESCALATE_FROM` pede **CIENTE**; sem resposta em `TEAM_ESCALATE_MINUTES` (15), vai sozinho para `TEAM_ESCALATE_TO`.
+- `pedir_aprovacao`: manda ao `TEAM_APPROVER` a resposta proposta com um código (`#C1234`). Ele responde `1 #C1234` (enviar), `2 #C1234 texto` (enviar ajustado) ou `3 #C1234` (ele responde); a decisão é aplicada na conversa do cliente em até 1 min. Pedidos expiram em 48 h sem envio.
+- Contatos da equipe recebem a etiqueta `TEAM_LABEL` (`equipe`): coloque-a em "etiquetas ignoradas" do agente da caixa para ele não responder à equipe.
+
+### Módulo opcional: monitor jurídico (Brasil)
+Liga com `LEGAL_MONITOR=true`. Fontes gratuitas: DJEN/CNJ por OAB (`DJEN_OAB`, `DJEN_UF`; a API só aceita IP brasileiro, então use `DJEN_PROXY_URL` + `DJEN_PROXY_KEY_FILE` com um proxy no Brasil) e e-mails da caixa `LEGAL_EMAIL_INBOX_ID` (Jusbrasil, PJe push, Escavador, Recorte Digital OAB, tribunais `*.jus.br`).
+- Deduplica por CNJ + data de disponibilização + tipo do ato; acha o cliente pelo processo vinculado ou pelo nome exato das partes.
+- Cria (se não existir) o funil **Prazos e publicações** (Nova → Prazo calculado → Em elaboração → Protocolado → Arquivado): um card por cliente (o CRM só permite um card ativo por contato e funil) e **uma tarefa por publicação** — "Calcular prazo" ou, para movimentação sem intimação, "Conferir no PJe". Publicações sem cliente ficam no contato `LEGAL_UNLINKED_CONTACT_NAME`.
+- `prazo_registrar` grava o prazo calculado na tarefa, move o card e devolve o evento sugerido para a agenda (2 dias e 4 h antes).
+- Resumo por WhatsApp (módulo equipe) em dias úteis às `LEGAL_DIGEST_TIME` (07:30), só com novidade, com lembrete do painel do PJe em `LEGAL_PJE_REMINDER_WEEKDAYS` (segunda e quinta).
+- E-mails automáticos são arquivados (resolvidos, nunca apagados); e-mails de pessoas ficam abertos; `LEGAL_OWN_EMAILS` marca relatórios internos.
+- Opcional: `POSVENDA_PIPELINE_ID` + `STAGE_*` movem o card do cliente no funil de relacionamento conforme o tipo de ato.
+
+Recomendação para agentes nativos de e-mail: o Evo CRM envia a resposta do agente como e-mail ao remetente. Use um fork que transforme a saída do agente em nota privada em caixas de e-mail (ver `evo-ai-crm-community`, `Message#force_private_for_silent_bot`).
+
 ## Instalação
 
 Requisitos: Node.js 20 ou superior e npm.
@@ -94,7 +120,7 @@ Exporte `MCP_BEARER_TOKEN` antes de iniciar o Codex. Esses campos seguem a [docu
 
 ## Tools
 
-No escopo `read`, são registradas somente as 12 tools de leitura. `write` registra as 24 tools. Todos os argumentos e descrições estão em pt-BR; IDs são strings obtidas nas consultas.
+No escopo `read`, são registradas somente as 17 tools de leitura. `write` registra as 46 tools base (mais as dos módulos opcionais, se configurados). Todos os argumentos e descrições estão em pt-BR; IDs são strings obtidas nas consultas.
 
 | Tool | Escopo | Endpoint relativo a `/api/v1` |
 | --- | --- | --- |
@@ -122,6 +148,14 @@ No escopo `read`, são registradas somente as 12 tools de leitura. `write` regis
 | `task_complete` | write | `POST /pipelines/:pipeline_id/pipeline_tasks/:task_id/complete` |
 | `inboxes_list` | read | `GET /inboxes` |
 | `agents_list` | read | `GET /agents` |
+| `labels_list` / `label_create` | read / write | `GET` e `POST /labels` |
+| `custom_attributes_list` / `custom_attribute_create` | read / write | `GET` e `POST /custom_attribute_definitions` |
+| `pipeline_create` / `pipeline_update` | write | `POST /pipelines` (com `stages`) / `PATCH /pipelines/:id` — `card_fields` vira `custom_fields` do funil |
+| `pipeline_stage_create` / `_update` / `_delete` | write | `/pipelines/:id/pipeline_stages[/:stage_id]` |
+| `pipeline_item_custom_fields_update` / `pipeline_item_delete` | write | `PATCH .../pipeline_items/:id/update_custom_fields` / `DELETE .../pipeline_items/:id` |
+| `task_update` / `task_cancel` / `task_reopen` | write | `PATCH .../pipeline_tasks/:id`, `POST .../cancel`, `POST .../reopen` |
+| `message_templates_list` / `message_template_get` / `_create` / `_delete` / `message_templates_sync` | read / write | modelos do WhatsApp Cloud por caixa |
+| `conversation_reply_window` / `template_send` / `conversation_start_with_template` | read / write | janela de 24 h e envio de modelo aprovado |
 
 `contacts_list`, `contacts_search`, `conversations_list` e `inboxes_list` enviam `page` e `per_page` ao CRM. `agents_list` envia também `skip`, `limit` e `pageSize` ao proxy de IA. O padrão é `page=1`, `limit=20`, com máximo de 100. O servidor sempre recorta a coleção ao limite solicitado e indica `truncated` se o upstream o ignorar. Nesse caso, confira `upstream_meta` antes de avançar, pois a instalação pode usar tamanho de página diferente.
 

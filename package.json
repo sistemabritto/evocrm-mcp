@@ -1,17 +1,20 @@
 {
   "name": "evocrm-mcp",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Servidor MCP em TypeScript para a API REST do Evo AI CRM Community",
   "type": "module",
   "private": true,
   "license": "MIT",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc",
     "test": "npm run build && node --test tests/*.test.mjs",
     "start": "node dist/stdio.js",
     "start:http": "node dist/http.js",
-    "test:live:read": "npm run build && node scripts/live-read.mjs"
+    "test:live:read": "npm run build && node scripts/live-read.mjs",
+    "start:oauth": "node --require ./compat.cjs oauth-server.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
