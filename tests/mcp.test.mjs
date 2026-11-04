@@ -20,9 +20,13 @@ const env = { EVOCRM_BASE_URL: 'https://crm.example.invalid', EVOCRM_API_TOKEN: 
   MCP_TOKEN_SHA256_READ: hash(readToken), MCP_TOKEN_SHA256_WRITE: hash(writeToken) };
 const config = loadConfig(env, 'http');
 const writes = ['contact_create', 'contact_update', 'contact_note_add', 'message_send', 'conversation_assign',
-  'conversation_set_status', 'labels_add', 'pipeline_item_create', 'pipeline_item_move', 'pipeline_item_update', 'task_create', 'task_complete'];
+  'conversation_set_status', 'labels_add', 'pipeline_item_create', 'pipeline_item_move', 'pipeline_item_update', 'task_create', 'task_complete',
+  'pipeline_create', 'pipeline_update', 'pipeline_stage_create', 'pipeline_stage_update', 'pipeline_stage_delete', 'pipeline_item_custom_fields_update',
+  'pipeline_item_delete', 'task_update', 'task_cancel', 'task_reopen', 'label_create', 'custom_attribute_create',
+  'message_template_create', 'message_templates_sync', 'message_template_delete', 'template_send', 'conversation_start_with_template'];
 const reads = ['contacts_list', 'contacts_search', 'contact_get', 'conversations_list', 'conversation_get', 'messages_list',
-  'pipelines_list', 'pipeline_get', 'pipeline_items_list', 'tasks_list', 'inboxes_list', 'agents_list'];
+  'pipelines_list', 'pipeline_get', 'pipeline_items_list', 'tasks_list', 'inboxes_list', 'agents_list',
+  'labels_list', 'custom_attributes_list', 'message_templates_list', 'message_template_get', 'conversation_reply_window'];
 const json = data => Response.json({ success: true, data });
 const parsed = result => JSON.parse(result.content[0].text);
 
@@ -49,7 +53,7 @@ test('configuração valida origem fixa, escopo padrão e hashes HTTP', () => {
   assert.throws(() => loadConfig({ ...env, MCP_ALLOWED_ORIGINS: '*' }, 'http'));
 });
 
-test('read registra somente 12 leituras e impede chamada de escrita', async t => {
+test('read registra somente as leituras e impede chamada de escrita', async t => {
   let calls = 0;
   const client = await connect(t, 'read', async () => { calls++; return json([]); });
   const list = await client.listTools();
@@ -59,7 +63,7 @@ test('read registra somente 12 leituras e impede chamada de escrita', async t =>
   assert.equal(calls, 0);
 });
 
-test('write registra 24 tools com schemas descritos e annotations conservadoras', async t => {
+test('write registra leituras e escritas com schemas descritos e annotations conservadoras', async t => {
   const client = await connect(t, 'write');
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map(x => x.name).sort(), [...reads, ...writes].sort());
@@ -272,7 +276,7 @@ test('HTTP real com SDK: initialize, chamadas stateless e isolamento read/write 
   await once(httpServer, 'listening');
   t.after(() => new Promise(resolve => { httpServer.close(resolve); httpServer.closeAllConnections(); }));
   const url = new URL(`http://127.0.0.1:${httpServer.address().port}/mcp`);
-  for (const [token, count] of [[writeToken, 24], [readToken, 12], [readToken, 12]]) {
+  for (const [token, count] of [[writeToken, reads.length + writes.length], [readToken, reads.length], [readToken, reads.length]]) {
     const client = new Client({ name: 'http-test', version: '1.0.0' });
     const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: { Authorization: `Bearer ${token}` } } });
     await client.connect(transport);
@@ -288,6 +292,6 @@ test('stdio real com SDK lista somente leituras sem fazer chamadas ao CRM', asyn
   const client = new Client({ name: 'stdio-test', version: '1.0.0' });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 12);
+    assert.equal((await client.listTools()).tools.length, reads.length);
   } finally { await client.close(); }
 });

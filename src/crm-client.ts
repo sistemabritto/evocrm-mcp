@@ -22,7 +22,7 @@ export class CrmClient {
   constructor(private readonly config: Pick<Config, 'baseUrl' | 'apiToken'>,
     private readonly fetcher: typeof fetch = fetch, private readonly timeoutMs = 15000) {}
 
-  async request(method: 'GET' | 'POST' | 'PATCH' | 'PUT', path: string, query: Query = {}, body?: unknown): Promise<Envelope> {
+  async request(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, query: Query = {}, body?: unknown): Promise<Envelope> {
     // Paths are assembled exclusively by tools. Never accept absolute URLs or redirects.
     if (!/^\/[a-zA-Z0-9_/-]+$/.test(path) || path.startsWith('//')) {
       throw new CrmError('invalid_path', 'Caminho de API inválido.');
