@@ -33,6 +33,12 @@ Liga com `LEGAL_MONITOR=true`. Fontes gratuitas: DJEN/CNJ por OAB (`DJEN_OAB`, `
 Liga com `DOCUSEAL_URL` + `DOCUSEAL_MCP_TOKEN_FILE` (e `DOCUSEAL_API_TOKEN_FILE` para os links). Repassa o MCP nativo do DocuSeal no conector OAuth:
 `assinatura_modelos_buscar`, `assinatura_modelo_carregar`, `assinatura_modelo_criar`, `assinatura_enviar` (contata pessoas reais), `assinatura_documentos_buscar` e `assinatura_links` (links por signatário, para enviar por WhatsApp).
 
+### Módulo opcional: cobranças no Asaas
+Liga com `ASAAS_API_KEY_FILE` (`ASAAS_BASE_URL` padrão `https://api.asaas.com/v3`; sandbox `https://api-sandbox.asaas.com/v3`). **Lista fechada, sem transferência, estorno ou exclusão.**
+- Agente de atendimento (`/atendimento/mcp`): `asaas_minhas_cobrancas` e `asaas_segunda_via` — só do próprio cliente; o servidor confere o CPF/CNPJ com a cobrança.
+- Conector: também `asaas_clientes_buscar`, `asaas_cobrancas_listar`, `asaas_cobranca_detalhe`, `asaas_cliente_criar`, `asaas_cobranca_criar` e `asaas_saldo`.
+Dica: crie a chave no Asaas com permissões mínimas (clientes e cobranças) e sem transferências.
+
 Recomendação para agentes nativos de e-mail: o Evo CRM envia a resposta do agente como e-mail ao remetente. Use um fork que transforme a saída do agente em nota privada em caixas de e-mail (ver `evo-ai-crm-community`, `Message#force_private_for_silent_bot`).
 
 ## Instalação

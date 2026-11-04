@@ -14,6 +14,7 @@ import { registerAgents } from './tools/agents.js';
 import { registerTemplates } from './tools/templates.js';
 import { registerAdmin } from './tools/admin.js';
 import { registerAssinatura } from './tools/assinatura.js';
+import { registerAsaas, registerAsaasAgente } from './tools/asaas.js';
 import { registerEquipe, registerEquipeAgente } from './tools/equipe.js';
 import { registerJuridico, registerJuridicoAgente } from './tools/juridico.js';
 import { legalSettings } from './legal/state.js';
@@ -30,7 +31,7 @@ const recoveryTools: Record<string, string[]> = {
   pipeline_create: ['pipelines_list'], pipeline_update: ['pipeline_get'], pipeline_stage_create: ['pipeline_get'], pipeline_stage_update: ['pipeline_get'],
   pipeline_stage_delete: ['pipeline_get'], pipeline_item_custom_fields_update: ['pipeline_items_list'], pipeline_item_delete: ['pipeline_items_list'],
   task_update: ['tasks_list'], task_cancel: ['tasks_list'], task_reopen: ['tasks_list'], label_create: ['labels_list'], custom_attribute_create: ['custom_attributes_list'],
-  prazo_registrar: ['publicacoes_listar'], assinatura_enviar: ['assinatura_documentos_buscar'], assinatura_modelo_criar: ['assinatura_modelos_buscar'], agenda_google_configurar: ['agenda_google_status'], agenda_sincronizar_prazos: ['agenda_google_status'], emails_processar: ['publicacoes_listar'], processo_vincular_cliente: ['processos_vinculados'],
+  prazo_registrar: ['publicacoes_listar'], asaas_cliente_criar: ['asaas_clientes_buscar'], asaas_cobranca_criar: ['asaas_cobrancas_listar'], assinatura_enviar: ['assinatura_documentos_buscar'], assinatura_modelo_criar: ['assinatura_modelos_buscar'], agenda_google_configurar: ['agenda_google_status'], agenda_sincronizar_prazos: ['agenda_google_status'], emails_processar: ['publicacoes_listar'], processo_vincular_cliente: ['processos_vinculados'],
   djen_consultar_agora: ['publicacoes_listar'],
 };
 // Credenciais de canais (tokens do Evolution, chaves da Meta, senhas) nunca vão para o modelo.
@@ -83,10 +84,11 @@ export function createMcpServer(config: Config, scope: Scope = config.scope, crm
   };
   // Agentes nativos do CRM (endpoint interno): só o necessário, nada que contate clientes por conta própria.
   if (toolset === 'emails') { if (legalSettings.enabled) registerJuridicoAgente(register, crm); return server; }
-  if (toolset === 'atendimento') { registerEquipeAgente(register, crm); return server; }
+  if (toolset === 'atendimento') { registerEquipeAgente(register, crm); registerAsaasAgente(register); return server; }
   for (const setup of [registerContacts, registerConversations, registerMessages, registerLabels, registerPipelines, registerTasks,
     registerAdmin, registerInboxes, registerAgents, registerTemplates, registerEquipe]) setup(register, crm);
   if (legalSettings.enabled) registerJuridico(register, crm);
   registerAssinatura(register);
+  registerAsaas(register);
   return server;
 }
