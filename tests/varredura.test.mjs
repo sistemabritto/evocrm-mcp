@@ -105,7 +105,8 @@ test('prazo_registrar atualiza a tarefa e o resumo diário mostra novidades, pra
   const venc = new Date(Date.now() + 3 * 86400e3 - 3 * 3600e3).toISOString().slice(0, 10);
   const r = await registrarPrazo(crm, { processo: '00000011120258050001', prazo_final: venc, base_legal: 'Manifestação, 5 dias úteis (CPC 219)' });
   assert.equal(r.prazo_final, venc); assert.equal(r.tarefa_atualizada, true);
-  assert.match(r.agenda_sugerida.titulo, /^Prazo: Publicação – 0000001-11\.2025\.8\.05\.0001$/);
+  assert.match(r.google_agenda.evento_sugerido.titulo, /^Prazo: Publicação – 0000001-11\.2025\.8\.05\.0001$/);
+  assert.equal(r.google_agenda.status, 'não criado');
   const patch = chamadas.findLast(c => c.startsWith('PATCH /pipelines/pz/pipeline_tasks/'));
   assert.match(patch, /"due_date":"\d{4}-\d{2}-\d{2}T23:59:00-03:00"/); assert.match(patch, /vence/);
   await assert.rejects(registrarPrazo(crm, { processo: '0000000-00.0000.0.00.0000', prazo_final: venc, base_legal: 'x' }), /Não achei/);
@@ -127,4 +128,30 @@ test('migração única leva publicações antigas ao funil sem repetir nota', a
   assert.ok(st.eventos['antigo|2026-11-01|intimacao'].task_id);
   assert.equal(chamadas.filter(c => c.includes('/notes')).length, notasAntes, 'sem nota repetida');
   assert.equal(await levarAntigasParaPrazos(crm), 0, 'roda uma vez só');
+});
+
+test('Google Agenda: cria, atualiza sem duplicar e recria se apagado', async () => {
+  const { configurarAgenda, prazoNaAgenda } = await import('../dist/legal/agenda.js');
+  const chamadasG = []; let existe = new Map(); let seq = 0;
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = new URL(String(url)); chamadasG.push(`${init.method || 'GET'} ${u.pathname}${u.search}`);
+    if (u.host === 'oauth2.googleapis.com') return Response.json({ access_token: 'at', expires_in: 3600 });
+    if (init.method === undefined || init.method === 'GET') {
+      if (u.pathname.endsWith('/events')) { const k = u.searchParams.get('privateExtendedProperty').split('=')[1]; return Response.json({ items: existe.has(k) ? [{ id: existe.get(k) }] : [] }); }
+      return Response.json({ summary: 'Agenda do Escritório' });
+    }
+    if (init.method === 'POST') { const b = JSON.parse(init.body); const id = 'g' + (++seq); existe.set(b.extendedProperties.private.crmChave, id); assert.equal(b.start.date, '2026-12-01'); assert.equal(b.end.date, '2026-12-02'); assert.deepEqual(b.reminders.overrides.map(o => o.minutes), [2880, 240]); return Response.json({ id }); }
+    if (init.method === 'PATCH') { const id = u.pathname.split('/').pop(); if (![...existe.values()].includes(id)) return new Response('{}', { status: 404 }); return Response.json({ id }); }
+    return new Response('{}', { status: 500 });
+  };
+  try {
+    assert.equal(await configurarAgenda({ clientId: 'x', clientSecret: 'y', refreshToken: 'z', calendarId: 'primary' }), 'Agenda do Escritório');
+    const ev = { chave: 'k1', processo: '0000001-11.2025.8.05.0001', tipo: 'Intimação', data: '2026-11-20', prazo_final: '2026-12-01', fontes: ['djen'], resumo: '', etapa: 'andamento', criado_em: '' };
+    const a = await prazoNaAgenda(ev); assert.equal(a.status, 'criado');
+    const b = await prazoNaAgenda(ev); assert.equal(b.status, 'atualizado'); assert.equal(b.id, a.id, 'achou pela marca crmChave, sem duplicar');
+    existe = new Map();                          // alguém apagou o evento na agenda
+    const c = await prazoNaAgenda({ ...ev, agenda_evento_id: a.id }); assert.equal(c.status, 'criado');
+    assert.equal(chamadasG.filter(x => x.startsWith('POST /calendar')).length, 2);
+  } finally { globalThis.fetch = original; }
 });

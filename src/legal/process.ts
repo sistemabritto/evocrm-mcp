@@ -4,6 +4,7 @@ import { getState, saveState, legalSettings as settings, processDigits } from '.
 import { linkFor, addNote, ensurePosvendaItem, createTask } from './ops.js';
 import { classificar, ETAPA_STAGE, ETAPA_ROTULO, semAcento, type Etapa } from './classify.js';
 import { garantirFunilPrazos, cardPrazos, moverCard, atualizarCamposCard } from './prazos.js';
+import { prazoNaAgenda } from './agenda.js';
 
 export type Evento = {
   fonte: 'djen' | 'jusbrasil' | 'pje-push' | 'escavador' | 'recorte-oab' | 'tribunal' | 'intima';
@@ -18,7 +19,7 @@ export type EventoSalvo = {
   contact_id?: string; cliente?: string; criado_em: string; link?: string; resumo: string; tribunal?: string;
   conferir?: boolean;          // movimentação sem intimação: tarefa "Conferir no PJe", sem prazo
   item_prazos_id?: string; task_id?: string;
-  prazo_final?: string; base_legal?: string; revisar?: boolean;
+  prazo_final?: string; base_legal?: string; revisar?: boolean; agenda_evento_id?: string;
 };
 
 /** Chave de deduplicação: CNJ + data de disponibilização + tipo do ato. */
@@ -175,8 +176,12 @@ export async function registrarPrazo(crm: CrmClient, a: { processo: string; data
     await moverCard(crm, ev.item_prazos_id, 'calculado', ['nova']).catch(() => undefined);
     await atualizarCamposCard(crm, ev.contact_id ?? f.sem_cliente_id).catch(() => undefined);
   }
+  const agenda = await prazoNaAgenda(ev);
+  if (agenda.id) { ev.agenda_evento_id = agenda.id; saveState(); }
   return { processo: ev.processo, ato: ev.tipo, disponibilizacao: ev.data, prazo_final: a.prazo_final, tarefa_atualizada: !!ev.task_id, cliente: ev.cliente ?? null,
-    agenda_sugerida: { titulo: `Prazo: ${ev.tipo} – ${ev.processo}`, data: venc, lembretes: ['2 dias antes', '4 horas antes'] } };
+    google_agenda: agenda.status === 'sem_agenda'
+      ? { status: 'não criado', motivo: agenda.erro ?? 'Google Agenda não configurado no CRM (agenda_google_configurar)', evento_sugerido: { titulo: `Prazo: ${ev.tipo} – ${ev.processo}`, dia_inteiro: a.prazo_final, lembretes: ['2 dias antes', '4 horas antes'] } }
+      : { status: agenda.status, evento_id: agenda.id } };
 }
 
 /** Migração única: publicações registradas antes do funil de prazos ganham card/tarefa (sem repetir a nota). */

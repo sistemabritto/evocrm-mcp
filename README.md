@@ -4,7 +4,7 @@ Servidor [MCP](https://modelcontextprotocol.io/) em TypeScript para conectar ass
 
 O alvo é a API da branch `main` do upstream [evolution-foundation/evo-ai-crm-community](https://github.com/evolution-foundation/evo-ai-crm-community), inspecionada em 23/10/2026 no commit **`30fcb61dd824aa5b74e01467001f58cc90c2281f`**. Os contratos foram conferidos em [config/routes.rb](https://github.com/evolution-foundation/evo-ai-crm-community/blob/30fcb61dd824aa5b74e01467001f58cc90c2281f/config/routes.rb) e [app/controllers/api/v1](https://github.com/evolution-foundation/evo-ai-crm-community/tree/30fcb61dd824aa5b74e01467001f58cc90c2281f/app/controllers/api/v1), com apoio dos helpers, serializers e finders desse mesmo commit. Não depende de endpoints exclusivos de forks. O client Python `int-evo-crm` serviu apenas de referência auxiliar de payloads.
 
-## Novidades da 0.3.0
+## Novidades da 0.3.x
 
 - **Administração do CRM**: criar e editar funis (etapas e campos dos cards), etapas, campos dos cards, tarefas (editar, cancelar, reabrir), etiquetas e campos personalizados de contato/conversa.
 - **Servidor OAuth 2.1** (`oauth-server.mjs`, `npm run start:oauth`): conector para Claude, ChatGPT/Codex e Grok, com tela de senha (`CONNECTOR_PASSWORD_SCRYPT_FILE`), `PUBLIC_URL` e `MCP_ORG_NAME`. `MCP_DISABLED_TOOLS` desliga ferramentas (ex.: `message_send`).
@@ -23,7 +23,8 @@ Liga com `TEAM_INBOX_ID` (caixa de WhatsApp) e `TEAM_MEMBERS=chave:5511...:Nome,
 Liga com `LEGAL_MONITOR=true`. Fontes gratuitas: DJEN/CNJ por OAB (`DJEN_OAB`, `DJEN_UF`; a API só aceita IP brasileiro, então use `DJEN_PROXY_URL` + `DJEN_PROXY_KEY_FILE` com um proxy no Brasil) e e-mails da caixa `LEGAL_EMAIL_INBOX_ID` (Jusbrasil, PJe push, Escavador, Recorte Digital OAB, tribunais `*.jus.br`).
 - Deduplica por CNJ + data de disponibilização + tipo do ato; acha o cliente pelo processo vinculado ou pelo nome exato das partes.
 - Cria (se não existir) o funil **Prazos e publicações** (Nova → Prazo calculado → Em elaboração → Protocolado → Arquivado): um card por cliente (o CRM só permite um card ativo por contato e funil) e **uma tarefa por publicação** — "Calcular prazo" ou, para movimentação sem intimação, "Conferir no PJe". Publicações sem cliente ficam no contato `LEGAL_UNLINKED_CONTACT_NAME`.
-- `prazo_registrar` grava o prazo calculado na tarefa, move o card e devolve o evento sugerido para a agenda (2 dias e 4 h antes).
+- `prazo_registrar` grava o prazo calculado na tarefa, move o card e cria/atualiza o evento no **Google Agenda** (dia inteiro, "Prazo: ato – CNJ", lembretes 2 dias e 4 h antes). Idempotente pela marca privada `crmChave`: reenviar atualiza, nunca duplica.
+- Google Agenda: `agenda_google_configurar` (client_id, client_secret e refresh_token de um cliente OAuth "Desktop" com escopo calendar; ficam só no servidor), `agenda_google_status` e `agenda_sincronizar_prazos`. Alternativa: `GOOGLE_CALENDAR_CONFIG_FILE` com `{clientId, clientSecret, refreshToken, calendarId}`.
 - Resumo por WhatsApp (módulo equipe) em dias úteis às `LEGAL_DIGEST_TIME` (07:30), só com novidade, com lembrete do painel do PJe em `LEGAL_PJE_REMINDER_WEEKDAYS` (segunda e quinta).
 - E-mails automáticos são arquivados (resolvidos, nunca apagados); e-mails de pessoas ficam abertos; `LEGAL_OWN_EMAILS` marca relatórios internos.
 - Opcional: `POSVENDA_PIPELINE_ID` + `STAGE_*` movem o card do cliente no funil de relacionamento conforme o tipo de ato.

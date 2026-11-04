@@ -6,7 +6,8 @@ import { reprocessarProcesso, registrarPrazo } from '../legal/process.js';
 import { djenAtivo, djenConfig } from '../legal/sources.js';
 import { ETAPA_ROTULO } from '../legal/classify.js';
 import { rodarMonitor, montarResumo } from '../legal/monitor.js';
-import { legalSettings } from '../legal/state.js';
+import { legalSettings, saveState } from '../legal/state.js';
+import { agendaConfig, configurarAgenda, testarAgenda, prazoNaAgenda } from '../legal/agenda.js';
 import { id } from './shared.js';
 import type { Register } from './types.js';
 
@@ -64,6 +65,30 @@ export function registerJuridico(register: Register, crm: CrmClient) {
     revisar: z.boolean().default(false).describe('Marca [REVISAR] quando houver dúvida no cálculo.'),
   }, true, ({ numero_processo, data_disponibilizacao, prazo_final, hora, base_legal, revisar }) =>
     registrarPrazo(crm, { processo: numero_processo, data: data_disponibilizacao, prazo_final, hora, base_legal, revisar }));
+  register('agenda_google_configurar', 'Liga o Google Agenda do escritório ao CRM (prazos viram eventos de dia inteiro "Prazo: ato – CNJ" com lembretes 2 dias e 4 h antes, sem duplicar). Use o client_id, client_secret e refresh_token de um cliente OAuth "Desktop" com escopo calendar (o mesmo do sync do painel antigo). As credenciais ficam só no servidor e nunca são devolvidas.', {
+    client_id: z.string().trim().regex(/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/).describe('Client ID OAuth (termina em .apps.googleusercontent.com).'),
+    client_secret: z.string().trim().min(10).max(200).describe('Client secret OAuth.'),
+    refresh_token: z.string().trim().min(20).max(512).describe('Refresh token com escopo https://www.googleapis.com/auth/calendar.'),
+    calendar_id: z.string().trim().min(3).max(200).default('primary').describe('Agenda (padrão: primary, a agenda principal da conta).'),
+  }, true, async ({ client_id, client_secret, refresh_token, calendar_id }) => {
+    const nome = await configurarAgenda({ clientId: client_id, clientSecret: client_secret, refreshToken: refresh_token, calendarId: calendar_id });
+    return { configurado: true, agenda: nome, proximo_passo: 'Rode agenda_sincronizar_prazos para levar à agenda os prazos já gravados.' };
+  });
+  register('agenda_google_status', 'Mostra se o Google Agenda está ligado ao CRM e testa o acesso (sem mostrar credenciais).', {}, false, async () => {
+    const c = agendaConfig(); if (!c) return { ligado: false, como_ligar: 'agenda_google_configurar' };
+    try { return { ligado: true, agenda: await testarAgenda(c), calendar_id: c.calendarId }; }
+    catch (e) { return { ligado: true, funcionando: false, erro: (e as Error).message }; }
+  });
+  register('agenda_sincronizar_prazos', 'Cria/atualiza no Google Agenda todos os prazos já gravados (idempotente: pode rodar quantas vezes quiser, não duplica).', {}, true, async () => {
+    const r = { criados: 0, atualizados: 0, falhas: [] as string[] };
+    for (const ev of Object.values(getState().eventos).filter(e => e.prazo_final)) {
+      const a = await prazoNaAgenda(ev);
+      if (a.id) { ev.agenda_evento_id = a.id; if (a.status === 'criado') r.criados++; else r.atualizados++; }
+      else r.falhas.push(`${ev.processo}: ${a.erro ?? 'agenda não configurada'}`);
+    }
+    saveState();
+    return r;
+  });
   register('resumo_publicacoes_previa', 'Mostra o texto do próximo resumo diário (publicações novas, prazos próximos e lembrete do PJe), sem enviar.', {}, false,
     async () => ({ resumo: montarResumo() ?? 'Sem novidade: o resumo de hoje não seria enviado.' }));
   register('monitor_juridico_status', 'Mostra como está o monitor jurídico (última varredura, DJEN, publicações sem cliente e regras).', {}, false,
@@ -71,7 +96,7 @@ export function registerJuridico(register: Register, crm: CrmClient) {
       const st = getState(); const ev = Object.values(st.eventos);
       return { ultima_varredura: st.ultima_varredura ?? null, djen: djenAtivo() ? (st.djen_ultima ?? 'ainda não rodou') : 'sem saída pelo Brasil configurada',
         publicacoes: ev.length, sem_cliente: ev.filter(e => !e.contact_id).length, com_prazo: ev.filter(e => e.prazo_final).length,
-        conferir_no_pje: ev.filter(e => e.conferir).length, processos_vinculados: Object.keys(st.processos).length,
+        conferir_no_pje: ev.filter(e => e.conferir).length, google_agenda: agendaConfig() ? 'ligado' : 'desligado (agenda_google_configurar)', processos_vinculados: Object.keys(st.processos).length,
         funil_prazos: st.prazos?.pipeline_id ?? null, ultimo_resumo: st.ultimo_resumo ?? null,
         regras: {
           fontes: `e-mails (na hora, pelo agente de e-mails, e a cada ${legalSettings.sweepMinutes} min) e DJEN às ${legalSettings.djenHours.join('h e ')}h${legalSettings.businessDaysOnly ? ' em dias úteis' : ''}`,
