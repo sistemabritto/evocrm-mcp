@@ -117,7 +117,7 @@ export async function reprocessarProcesso(crm: CrmClient, processo: string): Pro
   return n;
 }
 
-async function registrarNoCrm(crm: CrmClient, salvo: EventoSalvo, cliente: { id: string; nome: string } | null, e: Evento) {
+async function registrarNoCrm(crm: CrmClient, salvo: EventoSalvo, cliente: { id: string; nome: string } | null, e: Evento, opts: { semNota?: boolean } = {}) {
   const etapa = salvo.etapa;
   const fonteRotulo = ({ djen: 'DJEN (CNJ)', jusbrasil: 'Jusbrasil', 'pje-push': 'PJe push', escavador: 'Escavador', 'recorte-oab': 'Recorte Digital OAB', tribunal: 'E-mail do tribunal', intima: 'intima.ai' } as Record<string, string>)[e.fonte] ?? e.fonte;
   const corpo = [
@@ -130,7 +130,7 @@ async function registrarNoCrm(crm: CrmClient, salvo: EventoSalvo, cliente: { id:
   try {
     if (cliente) {
       salvo.contact_id = cliente.id; salvo.cliente = cliente.nome;
-      await addNote(crm, cliente.id, `Monitor jurídico\n${corpo}`);
+      if (!opts.semNota) await addNote(crm, cliente.id, `Monitor jurídico\n${corpo}`);
       if (settings.posvendaPipeline) {
         const item = await ensurePosvendaItem(crm, cliente.id);
         await moverPosvenda(crm, item, etapa).catch(() => undefined);
@@ -177,4 +177,21 @@ export async function registrarPrazo(crm: CrmClient, a: { processo: string; data
   }
   return { processo: ev.processo, ato: ev.tipo, disponibilizacao: ev.data, prazo_final: a.prazo_final, tarefa_atualizada: !!ev.task_id, cliente: ev.cliente ?? null,
     agenda_sugerida: { titulo: `Prazo: ${ev.tipo} – ${ev.processo}`, data: venc, lembretes: ['2 dias antes', '4 horas antes'] } };
+}
+
+/** Migração única: publicações registradas antes do funil de prazos ganham card/tarefa (sem repetir a nota). */
+export async function levarAntigasParaPrazos(crm: CrmClient, dias = 30): Promise<number> {
+  const st = getState() as ReturnType<typeof getState> & { migracao_prazos_v1?: string };
+  if (st.migracao_prazos_v1) return 0;
+  const desde = new Date(Date.now() - dias * 86400e3).toISOString();
+  let n = 0;
+  for (const s of Object.values(st.eventos)) {
+    if (s.item_prazos_id || s.criado_em < desde) continue;
+    if (s.conferir === undefined) s.conferir = soConferir({ fonte: s.fontes[0] as Evento['fonte'], tipo: s.tipo, texto: s.resumo }) || undefined;
+    const cliente = s.contact_id ? { id: s.contact_id, nome: s.cliente || '' } : null;
+    await registrarNoCrm(crm, s, cliente, { fonte: s.fontes[0] as Evento['fonte'], processo: s.processo, data: s.data, tipo: s.tipo, texto: s.resumo, link: s.link, tribunal: s.tribunal }, { semNota: true });
+    n++;
+  }
+  st.migracao_prazos_v1 = new Date().toISOString(); saveState();
+  return n;
 }

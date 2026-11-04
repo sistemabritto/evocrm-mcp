@@ -115,3 +115,16 @@ test('prazo_registrar atualiza a tarefa e o resumo diário mostra novidades, pra
   const terca = { date: hoje, hour: 7, minute: 30, weekday: 2 };
   assert.doesNotMatch(montarResumo(terca), /painel do PJe/);
 });
+
+test('migração única leva publicações antigas ao funil sem repetir nota', async () => {
+  const { levarAntigasParaPrazos } = await import('../dist/legal/process.js');
+  const { getState } = await import('../dist/legal/state.js');
+  const st = getState();
+  st.eventos['antigo|2026-11-01|intimacao'] = { chave: 'antigo|2026-11-01|intimacao', fontes: ['djen'], processo: '0000009-99.2026.8.05.0009', data: '2026-11-01',
+    tipo: 'Intimação', etapa: 'andamento', criado_em: new Date().toISOString(), resumo: 'Intime-se.', contact_id: 'cli-9', cliente: 'Cliente Nove' };
+  const notasAntes = chamadas.filter(c => c.includes('/notes')).length;
+  assert.equal(await levarAntigasParaPrazos(crm), 1);
+  assert.ok(st.eventos['antigo|2026-11-01|intimacao'].task_id);
+  assert.equal(chamadas.filter(c => c.includes('/notes')).length, notasAntes, 'sem nota repetida');
+  assert.equal(await levarAntigasParaPrazos(crm), 0, 'roda uma vez só');
+});

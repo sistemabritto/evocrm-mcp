@@ -5,6 +5,7 @@ import { getState, saveState, bahiaNow, legalSettings } from './state.js';
 import { varrerEmails, coletarDjen, djenAtivo, type ResumoEmail } from './sources.js';
 import { ETAPA_ROTULO } from './classify.js';
 import { garantirFunilPrazos } from './prazos.js';
+import { levarAntigasParaPrazos } from './process.js';
 import { team, enviarParaMembro, iniciarEquipe } from '../team/team.js';
 
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
@@ -105,8 +106,10 @@ export function iniciarMonitor(config: Pick<Config, 'baseUrl' | 'apiToken'>) {
   if (!legalSettings.enabled) return;
   const rodar = (m: string) => void rodarMonitor(crm, m).catch(e => console.error('jurídico:', (e as Error).message));
   setTimeout(() => {
-    void garantirFunilPrazos(crm).then(f => console.error(`jurídico: funil de prazos ${f.pipeline_id}`)).catch(e => console.error('jurídico: funil de prazos', (e as Error).message));
-    rodar('início');
+    void garantirFunilPrazos(crm)
+      .then(async f => { console.error(`jurídico: funil de prazos ${f.pipeline_id}`); const n = await levarAntigasParaPrazos(crm); if (n) console.error(`jurídico: ${n} publicação(ões) anteriores levadas ao funil de prazos`); })
+      .catch(e => console.error('jurídico: funil de prazos', (e as Error).message))
+      .finally(() => rodar('início'));
   }, 20_000).unref();
   setInterval(() => rodar('agendado'), legalSettings.sweepMinutes * 60e3).unref();
   setInterval(() => {
