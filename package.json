@@ -1,6 +1,6 @@
 {
   "name": "evocrm-mcp",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Servidor MCP em TypeScript para a API REST do Evo AI CRM Community",
   "type": "module",
   "private": true,

@@ -15,14 +15,16 @@ import { collection, CrmError, record, type CrmClient } from '../crm-client.js';
 
 const env = process.env;
 const digits = (s: string) => s.replace(/\D/g, '');
+/** Forma canônica para comparar celulares brasileiros com ou sem o nono dígito (o WhatsApp costuma gravar sem). */
+export const canon = (n: string) => { const d = digits(n); return d.length === 13 && d.startsWith('55') && d[4] === '9' ? d.slice(0, 4) + d.slice(5) : d; };
 export type Membro = { chave: string; numero: string; nome: string };
 
 export const team = (() => {
-  const bloqueados = new Set((env.TEAM_BLOCKED_NUMBERS || '').split(',').map(digits).filter(Boolean));
+  const bloqueados = new Set((env.TEAM_BLOCKED_NUMBERS || '').split(',').map(canon).filter(Boolean));
   const membros: Membro[] = (env.TEAM_MEMBERS || '').split(',').map(s => s.trim()).filter(Boolean).map(s => {
     const [chave = '', numero = '', ...nome] = s.split(':');
     return { chave: chave.trim().toLowerCase(), numero: digits(numero), nome: nome.join(':').trim() || chave.trim() };
-  }).filter(m => /^[a-z][a-z0-9_-]{0,30}$/.test(m.chave) && m.numero.length >= 12 && !bloqueados.has(m.numero));
+  }).filter(m => /^[a-z][a-z0-9_-]{0,30}$/.test(m.chave) && m.numero.length >= 12 && !bloqueados.has(canon(m.numero)));
   const padrao = (env.TEAM_DEFAULT || membros[0]?.chave || '').toLowerCase();
   return {
     inbox: env.TEAM_INBOX_ID || '', membros, bloqueados, padrao,
@@ -62,8 +64,8 @@ async function garantirEtiqueta(crm: CrmClient, contactId: string) {
 
 async function conversaDoMembro(crm: CrmClient, m: Membro): Promise<string> {
   if (st.conversas[m.chave]) return st.conversas[m.chave]!;
-  const busca = collection(await crm.request('GET', '/contacts/search', { q: m.numero, page: 1, per_page: 25 })).map(record);
-  let contactId = String(busca.find(c => c && digits(String(c.phone_number ?? '')) === m.numero)?.id ?? '');
+  const busca = collection(await crm.request('GET', '/contacts/search', { q: m.numero.slice(-8), page: 1, per_page: 25 })).map(record);
+  let contactId = String(busca.find(c => c && canon(String(c.phone_number ?? '')) === canon(m.numero))?.id ?? '');
   if (!contactId) {
     const novo = record((await crm.request('POST', '/contacts', {}, { name: m.nome, phone_number: `+${m.numero}` })).data);
     contactId = String(novo?.id ?? record(novo?.contact)?.id ?? '');
@@ -86,7 +88,7 @@ async function conversaDoMembro(crm: CrmClient, m: Membro): Promise<string> {
 export async function enviarParaMembro(crm: CrmClient, chave: string, texto: string) {
   if (!team.ativo) throw new CrmError('not_configured', 'Equipe não configurada no servidor.');
   const m = membro(chave);
-  if (!m || team.bloqueados.has(m.numero)) throw new CrmError('forbidden_destination', 'Destino fora da lista fixa da equipe.');
+  if (!m || team.bloqueados.has(canon(m.numero))) throw new CrmError('forbidden_destination', 'Destino fora da lista fixa da equipe.');
   const hoje = new Date().toISOString().slice(0, 10);
   if (hoje !== dia) { dia = hoje; enviadosHoje = 0; }
   if (enviadosHoje >= TETO_DIA) throw new CrmError('rate_limited', `Limite de ${TETO_DIA} mensagens internas por dia atingido. Agrupe os avisos.`);
@@ -119,7 +121,7 @@ async function conversaDoCliente(crm: CrmClient, contactId: string) {
 export async function pedirAprovacao(crm: CrmClient, contactId: string, texto: string, resumo: string) {
   if (!membro(team.aprovador)) throw new CrmError('not_configured', 'Aprovador não configurado.');
   const contato = record((await crm.request('GET', `/contacts/${contactId}`)).data) ?? {};
-  if (team.membros.some(m => m.numero === digits(String(contato.phone_number ?? '')))) throw new CrmError('invalid_arguments', 'Aprovação é só para clientes, não para a equipe.');
+  if (team.membros.some(m => canon(m.numero) === canon(String(contato.phone_number ?? '')))) throw new CrmError('invalid_arguments', 'Aprovação é só para clientes, não para a equipe.');
   const conversationId = await conversaDoCliente(crm, contactId);
   let codigo = '';
   do { codigo = `C${randomInt(1000, 10000)}`; } while (st.aprovacoes.some(a => a.codigo === codigo && a.status === 'pendente'));

@@ -11,9 +11,10 @@ const { team, alertarEquipe, enviarParaMembro, pedirAprovacao, verificarEquipe, 
 
 const agora = () => Math.floor(Date.now() / 1000);
 const enviados = []; const msgs = { 'conv-chefe': [], 'conv-ana': [], 'conv-cliente': [] };
-const contatos = { '5511900000001': 'k-chefe', '5511900000002': 'k-ana' };
+const contatos = { '00000001': 'k-chefe', '00000002': 'k-ana' };
 const crm = { async request(m, p, q = {}, b) {
-  if (m === 'GET' && p === '/contacts/search') return { data: contatos[q.q] ? [{ id: contatos[q.q], phone_number: '+' + q.q }] : [] };
+  // o CRM guarda sem o nono dígito (formato do WhatsApp): +5511000000xx
+  if (m === 'GET' && p === '/contacts/search') return { data: contatos[q.q] ? [{ id: contatos[q.q], phone_number: '+5511' + q.q }] : [] };
   if (m === 'GET' && /^\/contacts\/k-[a-z]+\/labels$/.test(p)) return { data: [] };
   if (m === 'POST' && /\/labels$/.test(p)) return { data: {} };
   if (m === 'GET' && p === '/contacts/k-chefe/conversations') return { data: [{ id: 'conv-chefe', inbox_id: 'inbox-suporte', status: 'open' }] };
@@ -26,6 +27,12 @@ const crm = { async request(m, p, q = {}, b) {
   if (/toggle_status$/.test(p)) { enviados.push({ conv: p.split('/')[2], status: b.status }); return { data: {} }; }
   return { data: {} };
 } };
+
+test('canon compara celular com e sem o nono dígito', async () => {
+  const { canon } = await import('../dist/team/team.js');
+  assert.equal(canon('+55 71 98240-0000'), canon('557182400000'));
+  assert.notEqual(canon('5571982400000'), canon('5571982400001'));
+});
 
 test('configuração: membro bloqueado fica fora da lista; destino fora da lista é recusado', async () => {
   assert.deepEqual(team.membros.map(m => m.chave), ['chefe', 'ana']);
@@ -93,7 +100,6 @@ test('aprovação: opção 3 não envia nada ao cliente e abre a conversa para h
 });
 
 test('aprovação recusa contato da própria equipe', async () => {
-  contatos['5511900000002'] = 'k-ana';
-  const crm2 = { ...crm, async request(m, p, q, b) { if (p === '/contacts/k-ana') return { data: { id: 'k-ana', phone_number: '+5511900000002' } }; return crm.request(m, p, q, b); } };
+  const crm2 = { ...crm, async request(m, p, q, b) { if (p === '/contacts/k-ana') return { data: { id: 'k-ana', phone_number: '+551100000002' } }; return crm.request(m, p, q, b); } };
   await assert.rejects(pedirAprovacao(crm2, 'k-ana', 'x', 'y'), /só para clientes/);
 });
