@@ -1,4 +1,4 @@
-export const VERSION = '0.3.3';
+export const VERSION = '0.4.0';
 export const MAX_LIMIT = 100;
 export type Scope = 'read' | 'write';
 export interface Config {

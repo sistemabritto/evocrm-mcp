@@ -29,6 +29,10 @@ Liga com `LEGAL_MONITOR=true`. Fontes gratuitas: DJEN/CNJ por OAB (`DJEN_OAB`, `
 - E-mails automáticos são arquivados (resolvidos, nunca apagados); e-mails de pessoas ficam abertos; `LEGAL_OWN_EMAILS` marca relatórios internos.
 - Opcional: `POSVENDA_PIPELINE_ID` + `STAGE_*` movem o card do cliente no funil de relacionamento conforme o tipo de ato.
 
+### Módulo opcional: assinatura eletrônica (DocuSeal self-hosted)
+Liga com `DOCUSEAL_URL` + `DOCUSEAL_MCP_TOKEN_FILE` (e `DOCUSEAL_API_TOKEN_FILE` para os links). Repassa o MCP nativo do DocuSeal no conector OAuth:
+`assinatura_modelos_buscar`, `assinatura_modelo_carregar`, `assinatura_modelo_criar`, `assinatura_enviar` (contata pessoas reais), `assinatura_documentos_buscar` e `assinatura_links` (links por signatário, para enviar por WhatsApp).
+
 Recomendação para agentes nativos de e-mail: o Evo CRM envia a resposta do agente como e-mail ao remetente. Use um fork que transforme a saída do agente em nota privada em caixas de e-mail (ver `evo-ai-crm-community`, `Message#force_private_for_silent_bot`).
 
 ## Instalação
