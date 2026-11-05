@@ -8,6 +8,7 @@ import { loadConfig } from './dist/config.js';
 import { createMcpServer } from './dist/server.js';
 import { CrmClient } from './dist/crm-client.js';
 import { iniciarMonitor } from './dist/legal/monitor.js';
+import { webhooksAtivos, tokenValido, webhookAsaas, webhookDocuseal } from './dist/tracking/webhooks.js';
 
 const env = process.env;
 if (env.EVOCRM_API_TOKEN_FILE) env.EVOCRM_API_TOKEN = readFileSync(env.EVOCRM_API_TOKEN_FILE, 'utf8').trim();
@@ -156,6 +157,16 @@ createServer(async (req, res) => {
     if (p === '/.well-known/oauth-authorization-server' || p === '/.well-known/oauth-authorization-server/mcp' || p === '/.well-known/openid-configuration') return json(res, 200, asm);
     if (p === '/mcp') return await handleMcp(req, res);
     if (Object.hasOwn(INTERNOS, p)) return await handleAgentMcp(req, res, INTERNOS[p]);
+    // Funil de tráfego: pagamentos (Asaas) e contratos (DocuSeal) viram marcos no CRM.
+    if ((p === '/webhooks/asaas' || p === '/webhooks/docuseal') && req.method === 'POST') {
+      if (!webhooksAtivos()) return json(res, 404, { error: 'not_found' });
+      const tk = p === '/webhooks/asaas' ? req.headers['asaas-access-token'] : req.headers['x-tracking-token'];
+      if (!tokenValido(Array.isArray(tk) ? tk[0] : tk)) return json(res, 401, { error: 'invalid_token' });
+      let body; try { body = JSON.parse((await readBody(req, 512 * 1024)).toString('utf8')); } catch { return json(res, 400, { error: 'json inválido' }); }
+      const crm = new CrmClient(config);
+      const r = p === '/webhooks/asaas' ? await webhookAsaas(crm, body) : await webhookDocuseal(crm, body);
+      return json(res, 200, { ok: true, ...r });
+    }
     if (p === '/register' && req.method === 'POST') {
       let m; try { m = JSON.parse((await readBody(req)).toString('utf8')); } catch { return json(res, 400, { error: 'invalid_client_metadata' }); }
       // Clientes como o Grok Bot registram vários callbacks de uma vez; guardamos só os permitidos.

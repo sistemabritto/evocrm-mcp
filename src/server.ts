@@ -15,6 +15,7 @@ import { registerTemplates } from './tools/templates.js';
 import { registerAdmin } from './tools/admin.js';
 import { registerAssinatura } from './tools/assinatura.js';
 import { registerAsaas, registerAsaasAgente } from './tools/asaas.js';
+import { registerTrafego } from './tools/trafego.js';
 import { registerEquipe, registerEquipeAgente } from './tools/equipe.js';
 import { registerJuridico, registerJuridicoAgente } from './tools/juridico.js';
 import { legalSettings } from './legal/state.js';
@@ -90,5 +91,7 @@ export function createMcpServer(config: Config, scope: Scope = config.scope, crm
   if (legalSettings.enabled) registerJuridico(register, crm);
   registerAssinatura(register);
   registerAsaas(register);
+  // Módulo opcional: funil de tráfego (CRMs evo-jud-crm com a API /tracking).
+  if (process.env.TRACKING_ENABLED === 'true') registerTrafego(register, crm);
   return server;
 }

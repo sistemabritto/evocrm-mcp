@@ -31,6 +31,12 @@ async function api<T = Record<string, unknown>>(method: 'GET' | 'POST', path: st
   return j as T;
 }
 
+/** Cliente do Asaas por ID (usado pelo webhook de pagamento do funil de tráfego). */
+export async function asaasCliente(customerId: string) {
+  if (!/^cus_[A-Za-z0-9]+$/.test(customerId)) throw new CrmError('invalid_arguments', 'Cliente inválido.');
+  return api<{ id: string; name?: string; email?: string; mobilePhone?: string; phone?: string; cpfCnpj?: string; externalReference?: string }>('GET', `/customers/${customerId}`);
+}
+
 type Cobranca = { id: string; customer: string; value: number; netValue?: number; dueDate: string; status: string; billingType: string;
   description?: string; invoiceUrl?: string; bankSlipUrl?: string; paymentDate?: string; installmentNumber?: number };
 const resumo = (c: Cobranca) => ({ id: c.id, valor: c.value, vencimento: c.dueDate, status: c.status, forma: c.billingType,

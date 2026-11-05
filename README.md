@@ -4,7 +4,7 @@ Servidor [MCP](https://modelcontextprotocol.io/) em TypeScript para conectar ass
 
 O alvo é a API da branch `main` do upstream [evolution-foundation/evo-ai-crm-community](https://github.com/evolution-foundation/evo-ai-crm-community), inspecionada em 23/10/2026 no commit **`30fcb61dd824aa5b74e01467001f58cc90c2281f`**. Os contratos foram conferidos em [config/routes.rb](https://github.com/evolution-foundation/evo-ai-crm-community/blob/30fcb61dd824aa5b74e01467001f58cc90c2281f/config/routes.rb) e [app/controllers/api/v1](https://github.com/evolution-foundation/evo-ai-crm-community/tree/30fcb61dd824aa5b74e01467001f58cc90c2281f/app/controllers/api/v1), com apoio dos helpers, serializers e finders desse mesmo commit. Não depende de endpoints exclusivos de forks. O client Python `int-evo-crm` serviu apenas de referência auxiliar de payloads.
 
-## Novidades da 0.3.x
+## Novidades da 0.3.x a 0.6.x
 
 - **Administração do CRM**: criar e editar funis (etapas e campos dos cards), etapas, campos dos cards, tarefas (editar, cancelar, reabrir), etiquetas e campos personalizados de contato/conversa.
 - **Servidor OAuth 2.1** (`oauth-server.mjs`, `npm run start:oauth`): conector para Claude, ChatGPT/Codex e Grok, com tela de senha (`CONNECTOR_PASSWORD_SCRYPT_FILE`), `PUBLIC_URL` e `MCP_ORG_NAME`. `MCP_DISABLED_TOOLS` desliga ferramentas (ex.: `message_send`).
@@ -38,6 +38,10 @@ Liga com `ASAAS_API_KEY_FILE` (`ASAAS_BASE_URL` padrão `https://api.asaas.com/v
 - Agente de atendimento (`/atendimento/mcp`): `asaas_minhas_cobrancas` e `asaas_segunda_via` — só do próprio cliente; o servidor confere o CPF/CNPJ com a cobrança.
 - Conector: também `asaas_clientes_buscar`, `asaas_cobrancas_listar`, `asaas_cobranca_detalhe`, `asaas_cliente_criar`, `asaas_cobranca_criar` e `asaas_saldo`.
 Dica: crie a chave no Asaas com permissões mínimas (clientes e cobranças) e sem transferências.
+
+### Módulo opcional: funil de tráfego (CRM com API `/tracking`, ex.: evo-jud-crm)
+Liga com `TRACKING_ENABLED=true`. Ferramentas no conector: `trafego_funil` (do clique ao pagamento, por origem e período, com números brutos, % e custos), `trafego_campanhas`, `trafego_status`, `trafego_links` (links de WhatsApp com código de origem: sem prefixo = Meta, `G` Google, `S` site, `P` Postiz, `O` OpenReply, `IG` Instagram), `trafego_origem_definir` e `trafego_marco_registrar`.
+Webhooks (com `TRACKING_WEBHOOK_TOKEN_FILE`): `POST /webhooks/asaas` (cabeçalho `asaas-access-token`; pagamento recebido → `pagamento_efetuado`, casado pelo `externalReference` = ID do contato ou pelo telefone/e-mail do cliente) e `POST /webhooks/docuseal` (cabeçalho `x-tracking-token`; envio concluído → `contrato_assinado` por signatário).
 
 Recomendação para agentes nativos de e-mail: o Evo CRM envia a resposta do agente como e-mail ao remetente. Use um fork que transforme a saída do agente em nota privada em caixas de e-mail (ver `evo-ai-crm-community`, `Message#force_private_for_silent_bot`).
 
